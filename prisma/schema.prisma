@@ -1,0 +1,308 @@
+// Pantry Scanner data model. See the feature spec, section 4.
+//
+// One household with several members. Everyone shares one catalog, one set of
+// stores and one open shopping list, so there is no Household model; User exists
+// to say who did what (who added an item, who to ask about a substitute).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth (NextAuth) + household members
+// ---------------------------------------------------------------------------
+
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String?
+  access_token             String?
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String?
+  session_state            String?
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refresh_token_expires_in Int?
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+
+  pushSubscriptions     PushSubscription[]
+  scans                 Scan[]
+  addedItems            GroceryListItem[]     @relation("AddedBy")
+  checkedItems          GroceryListItem[]     @relation("CheckedBy")
+  substitutionsAsked    SubstitutionRequest[] @relation("AskedBy")
+  substitutionsToAnswer SubstitutionRequest[] @relation("AskedTo")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// A Web Push subscription for one browser on one device.
+model PushSubscription {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String    @unique // push service URL (Google / Mozilla / Apple)
+  p256dh     String // browser's public key for payload encryption
+  auth       String // auth secret for payload encryption
+  userAgent  String? // shown in Settings
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+}
+
+// ---------------------------------------------------------------------------
+// Scanning
+// ---------------------------------------------------------------------------
+
+enum StorageType {
+  REFRIGERATED // fridge + freezer
+  DRY // pantry, cabinets, anywhere shelf-stable
+}
+
+enum ScanStatus {
+  UPLOADING
+  PROCESSING
+  REVIEW
+  FINALIZED
+  FAILED
+}
+
+enum DetectionStatus {
+  PENDING_REVIEW
+  CONFIRMED
+  REJECTED
+}
+
+model Scan {
+  id          String      @id @default(cuid())
+  storageType StorageType // one scan covers every space of this type
+  status      ScanStatus  @default(UPLOADING)
+  error       String? // set when status = FAILED
+  createdById String
+  createdBy   User        @relation(fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  finalizedAt DateTime?
+  photos      ScanPhoto[]
+  detections  Detection[]
+
+  @@index([storageType, createdAt])
+}
+
+model ScanPhoto {
+  id         String      @id @default(cuid())
+  scanId     String
+  scan       Scan        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  url        String // blob storage URL
+  width      Int
+  height     Int
+  createdAt  DateTime    @default(now())
+  detections Detection[]
+}
+
+model Detection {
+  id            String          @id @default(cuid())
+  scanId        String
+  scan          Scan            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  photoId       String
+  photo         ScanPhoto       @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  fingerprint   String // stable lowercase identity: brand+name, no qty/condition
+  name          String
+  brand         String?
+  category      String?
+  confidence    Float // 0.70-0.85 goes to review; above 0.85 is auto-accepted
+  boundingBox   Json // { xMin, yMin, xMax, yMax } normalized 0-1000
+  matchedItemId String? // set once resolved against PantryItem
+  matchedItem   PantryItem?     @relation(fields: [matchedItemId], references: [id], onDelete: SetNull)
+  status        DetectionStatus
+
+  @@index([scanId])
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+enum ItemStatus {
+  IN_STOCK
+  NOT_SPOTTED // seen before, missing from the latest scan, awaiting review
+  SNOOZED // ask again at the next scan of this storage type
+  OUT // confirmed gone; on a shopping list
+}
+
+// Every item ever seen, whether or not it is in stock right now.
+model PantryItem {
+  id                     String      @id @default(cuid())
+  fingerprint            String      @unique // one catalog entry per product, across storage types
+  storageType            StorageType // where it was last seen; updated if it moves
+  displayName            String
+  brand                  String?
+  category               String?
+  ignored                Boolean     @default(false) // one-offs / don't restock: never flagged missing
+  preferredStoreId       String? // standing pin (V2 UI)
+  preferredStore         Store?      @relation(fields: [preferredStoreId], references: [id], onDelete: SetNull)
+  firstSeenAt            DateTime    @default(now())
+  lastSeenAt             DateTime    @default(now())
+  status                 ItemStatus  @default(IN_STOCK)
+  representativePhotoUrl String?
+
+  detections Detection[]
+  listItems  GroceryListItem[]
+
+  @@index([storageType, status])
+}
+
+// ---------------------------------------------------------------------------
+// Shopping lists
+// ---------------------------------------------------------------------------
+
+enum ListStatus {
+  OPEN
+  SHOPPING
+  COMPLETE
+}
+
+// One instance per shopping trip. At most one list is open (OPEN or SHOPPING)
+// at a time; anyone can add to it whenever. Past lists are kept as history.
+model GroceryList {
+  id          String            @id @default(cuid())
+  status      ListStatus        @default(OPEN)
+  createdAt   DateTime          @default(now())
+  completedAt DateTime?
+  items       GroceryListItem[]
+
+  @@index([status])
+}
+
+model GroceryListItem {
+  id            String                @id @default(cuid())
+  listId        String
+  list          GroceryList           @relation(fields: [listId], references: [id], onDelete: Cascade)
+  sourceItemId  String? // PantryItem this came from, null if typed in by hand
+  sourceItem    PantryItem?           @relation(fields: [sourceItemId], references: [id], onDelete: SetNull)
+  label         String
+  quantity      String?
+  notes         String?
+  addedById     String
+  addedBy       User                  @relation("AddedBy", fields: [addedById], references: [id])
+  pinnedStoreId String? // this trip's store; defaults from PantryItem.preferredStoreId
+  pinnedStore   Store?                @relation(fields: [pinnedStoreId], references: [id], onDelete: SetNull)
+  position      Int                   @default(0) // manual ordering on the open list
+  createdAt     DateTime              @default(now())
+  checkedAt     DateTime?
+  checkedById   String?
+  checkedBy     User?                 @relation("CheckedBy", fields: [checkedById], references: [id])
+  substitutions SubstitutionRequest[]
+  dealMatches   DealMatch[]
+
+  @@index([listId])
+}
+
+enum SubReason {
+  OUT_OF_STOCK
+  AMBIGUOUS
+  OTHER
+}
+
+enum SubStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+// The shopper asks the person who added an item whether a substitute is OK.
+model SubstitutionRequest {
+  id            String          @id @default(cuid())
+  groceryItemId String
+  groceryItem   GroceryListItem @relation(fields: [groceryItemId], references: [id], onDelete: Cascade)
+  askedById     String
+  askedBy       User            @relation("AskedBy", fields: [askedById], references: [id])
+  askedToId     String
+  askedTo       User            @relation("AskedTo", fields: [askedToId], references: [id])
+  reason        SubReason
+  proposal      String?
+  photoUrl      String?
+  status        SubStatus       @default(PENDING)
+  reply         String?
+  createdAt     DateTime        @default(now())
+  answeredAt    DateTime?
+
+  @@index([askedToId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Stores & deals
+// ---------------------------------------------------------------------------
+
+model Store {
+  id          String       @id @default(cuid())
+  name        String
+  adapterKey  String // which store adapter to use, e.g. "flipp:Kroger" or "mock"
+  priority    Int          @default(0) // lower = preferred when a tie needs breaking
+  departments Department[]
+
+  pinnedCatalogItems PantryItem[]
+  pinnedListItems    GroceryListItem[]
+  dealMatches        DealMatch[]
+}
+
+model Department {
+  id          String      @id @default(cuid())
+  storeId     String
+  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name        String
+  sortOrder   Int
+  dealMatches DealMatch[]
+
+  @@unique([storeId, name])
+}
+
+model DealMatch {
+  id            String          @id @default(cuid())
+  groceryItemId String
+  groceryItem   GroceryListItem @relation(fields: [groceryItemId], references: [id], onDelete: Cascade)
+  storeId       String
+  store         Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  departmentId  String?
+  department    Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  title         String // the offer's product title, as the source names it
+  priceCents    Int?
+  wasPriceCents Int? // pre-sale price, for showing savings
+  couponSummary String?
+  sourceUrl     String?
+  fetchedAt     DateTime        @default(now())
+
+  @@index([groceryItemId])
+}

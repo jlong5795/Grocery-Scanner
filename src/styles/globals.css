@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* High contrast for poor kitchen lighting (spec section 11). */
+  --color-ink: #111827;
+  --color-muted: #4b5563;
+  --color-line: #d1d5db;
+  --color-surface: #ffffff;
+  --color-canvas: #f3f4f6;
+  --color-brand: #047857;
+  --color-brand-strong: #065f46;
+  --color-brand-soft: #d1fae5;
+  --color-warn: #b45309;
+  --color-warn-soft: #fef3c7;
+  --color-danger: #b91c1c;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+/* Room for the fixed bottom nav plus the iPhone home indicator. */
+.pb-nav {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+.bottom-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
