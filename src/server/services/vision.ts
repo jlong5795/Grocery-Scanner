@@ -70,6 +70,11 @@ function friendlyError(err: unknown): Error {
   if (err instanceof Anthropic.RateLimitError) {
     return new Error("Item recognition is busy right now. Try again in a minute.");
   }
+  if (err instanceof Anthropic.NotFoundError) {
+    return new Error(
+      `Item recognition isn't set up: the API couldn't find model "${env.VISION_MODEL}" for this API key. Check VISION_MODEL in .env. (${err.message})`,
+    );
+  }
   if (err instanceof Anthropic.APIConnectionError) {
     return new Error("Couldn't reach the item recognition service. Check the connection and try again.");
   }
@@ -89,6 +94,8 @@ export async function detectItemsInPhoto(
   try {
     return await detect(photo, knownFingerprints);
   } catch (err) {
+    // friendlyError drops the API's details; keep them in the server log.
+    console.error("[vision] Anthropic request failed:", err);
     throw friendlyError(err);
   }
 }
