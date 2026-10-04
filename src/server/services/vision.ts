@@ -5,7 +5,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import * as z from "zod/v4";
 
 import { env } from "~/env";
-import type { RawDetection } from "~/server/domain/inventory";
+import { MIN_CONFIDENCE, type RawDetection } from "~/server/domain/inventory";
 
 /**
  * Per-photo item detection (spec section 5), the analog of yard-sale's
@@ -40,7 +40,9 @@ const SYSTEM_PROMPT = `You catalog groceries in household storage photos (pantry
 
 For each photo, list the distinct grocery products you can identify.
 
-- Prefer a high-precision shortlist over exhaustive detection. Omit items you are unsure about rather than guessing; a wrong item pollutes an inventory the family relies on for months. Only include items with confidence of at least 0.70.
+- Be exhaustive: list every distinct grocery product you can see, including items that are partly hidden behind other packages, at the back or edge of a shelf, rotated, in the door shelves or drawers, or only partly legible. Missing an item is worse than listing an uncertain one, because the family reviews uncertain items before anything is saved.
+- Look shelf by shelf, left to right, so nothing is skipped. Count each distinct product once, however many copies are visible.
+- confidence is how sure you are of the product's identity: 0.85+ when brand and variant are clearly legible, 0.6-0.85 when you can read part of the label or recognize the packaging, 0.4-0.6 when you are inferring from shape, color or context. Include items down to ${MIN_CONFIDENCE.toFixed(2)}; omit only things you can't tell apart from background clutter.
 - fingerprint is a stable identity for the product: brand + product name + distinguishing variant (flavor, style), lowercase, with no package size, quantity, price or condition. Two jars of the same peanut butter share a fingerprint; creamy and crunchy do not.
 - When the user message lists fingerprints already in the household catalog and an item is the same product, reuse that exact fingerprint.
 - If the brand isn't legible, describe the product generically ("store brand white rice") and lower your confidence accordingly.

@@ -4,8 +4,12 @@
  */
 import { bestMatch } from "./fingerprint";
 
-/** The vision agent is told to omit anything below this. */
-export const MIN_CONFIDENCE = 0.7;
+/**
+ * The vision agent is told to omit anything below this. Kept low on purpose:
+ * recall matters most, and everything below AUTO_ACCEPT_CONFIDENCE goes to the
+ * user for a quick confirm before it touches the catalog.
+ */
+export const MIN_CONFIDENCE = 0.4;
 /** Above this, detections are accepted without review. */
 export const AUTO_ACCEPT_CONFIDENCE = 0.85;
 
