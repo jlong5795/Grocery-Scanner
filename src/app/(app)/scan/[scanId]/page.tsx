@@ -190,7 +190,9 @@ function Review({ scan }: { scan: Scan }) {
             className="shadow-lg"
             onClick={() => undecided.forEach((d) => decide(d.id, { action: "confirm" }))}
           >
-            Confirm the other {undecided.length}
+            {undecided.length === flagged.length
+              ? `Confirm all ${undecided.length} remaining`
+              : `Confirm the other ${undecided.length}`}
           </Button>
         ) : (
           <Button size="lg" className="shadow-lg" disabled={finalize.isPending || review.isPending} onClick={() => void save()}>
