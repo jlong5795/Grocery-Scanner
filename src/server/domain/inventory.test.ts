@@ -9,8 +9,9 @@ import {
 } from "./inventory";
 
 describe("reviewBand", () => {
-  it("drops below 0.70, reviews 0.70-0.85, accepts above 0.85", () => {
-    expect(reviewBand(0.69)).toBe("drop");
+  it("drops below 0.40, reviews 0.40-0.85, accepts above 0.85", () => {
+    expect(reviewBand(0.39)).toBe("drop");
+    expect(reviewBand(0.4)).toBe("review");
     expect(reviewBand(0.7)).toBe("review");
     expect(reviewBand(0.85)).toBe("review");
     expect(reviewBand(0.86)).toBe("accept");

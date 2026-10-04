@@ -13,7 +13,7 @@ import type { PhotoInput } from "./vision";
 /**
  * Scan pipeline (spec Flow A + sections 5 and 6):
  *   processScan  photos -> vision -> cross-photo dedup -> catalog match -> Detection rows
- *   reviewScan   user confirms / rejects / renames 0.70-0.85 confidence detections
+ *   reviewScan   user confirms / rejects / renames 0.40-0.85 confidence detections
  *   finalizeScan confirmed detections update the catalog; the missing-item rule runs
  */
 

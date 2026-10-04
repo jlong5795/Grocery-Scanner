@@ -6,7 +6,7 @@ The feature spec lives in Claude Docs: **Pantry Scanner — Feature Spec**. This
 
 ## What's in the MVP
 
-- **Scanning** (Flow A). Pick *Refrigerated* (fridge + freezer) or *Dry goods* (pantry + cabinets), take a burst of photos, and Claude identifies the groceries in each one. Detections at 0.70–0.85 confidence are flagged for a quick yes / rename / not-it; anything above 0.85 is accepted automatically.
+- **Scanning** (Flow A). Pick *Refrigerated* (fridge + freezer) or *Dry goods* (pantry + cabinets), take a burst of photos, and Claude identifies the groceries in each one. Detections at 0.40–0.85 confidence are flagged for a quick yes / rename / not-it; anything above 0.85 is accepted automatically.
 - **Catalog.** Every product ever seen, deduplicated by fingerprint (`src/server/domain/fingerprint.ts`). Items can be marked *Don't restock* (`ignored`) so they're never flagged as missing.
 - **Not spotted review** (Flow B). An item is missing if it's in the catalog, was in stock, isn't ignored, and wasn't seen in today's scan of its storage type. Nothing changes without a tap: *Gone, add to list* / *Still have it* / *Ask next scan* / *Don't restock*.
 - **Shared shopping list** (Flow C). At most one list is open at a time, and anyone in the household can add to it whenever they like. Adding the first item creates it. Every item records who added it; duplicates are caught.
